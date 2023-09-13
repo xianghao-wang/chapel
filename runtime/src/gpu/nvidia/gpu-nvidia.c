@@ -50,6 +50,9 @@ static CUmodule *chpl_gpu_cuda_modules;
 
 static int *deviceClockRates;
 
+static bool *devices_context_initialized;
+
+static void chpl_gpu_impl_set_globals(c_sublocid_t dev_id, CUmodule module);
 
 static bool chpl_gpu_has_context(void) {
   CUcontext cuda_context = NULL;
@@ -62,6 +65,35 @@ static bool chpl_gpu_has_context(void) {
   else {
     return cuda_context != NULL;
   }
+}
+
+static void init_device_context(int dev_id) {
+  // Lazily initialize context
+  if (devices_context_initialized[dev_id])
+    return;
+  devices_context_initialized[dev_id] = true;
+  
+
+  CUdevice device;
+  CUcontext context;
+
+  CUDA_CALL(cuDeviceGet(&device, dev_id));
+  CUDA_CALL(cuDevicePrimaryCtxSetFlags(device, CU_CTX_SCHED_BLOCKING_SYNC));
+  CUDA_CALL(cuDevicePrimaryCtxRetain(&context, device));
+
+  CUDA_CALL(cuCtxSetCurrent(context));
+  // load the module and setup globals within
+  CUmodule module = chpl_gpu_load_module(chpl_gpuBinary);
+  chpl_gpu_cuda_modules[dev_id] = module;
+
+  cuDeviceGetAttribute(&deviceClockRates[dev_id], CU_DEVICE_ATTRIBUTE_CLOCK_RATE, device);
+
+  chpl_gpu_devices[dev_id] = device;
+  chpl_gpu_primary_ctx[dev_id] = context;
+
+  // TODO can we refactor some of this to chpl-gpu to avoid duplication
+  // between runtime layers?
+  chpl_gpu_impl_set_globals(dev_id, module);
 }
 
 static void switch_context(int dev_id) {
@@ -111,6 +143,8 @@ void chpl_gpu_impl_init(int* num_devices) {
   chpl_gpu_devices = chpl_malloc(sizeof(CUdevice)*loc_num_devices);
   chpl_gpu_cuda_modules = chpl_malloc(sizeof(CUmodule)*loc_num_devices);
   deviceClockRates = chpl_malloc(sizeof(int)*loc_num_devices);
+  devices_context_initialized = chpl_malloc(sizeof(bool)*loc_num_devices);
+  memset(devices_context_initialized, 0, sizeof(bool)*loc_num_devices);
 
   int i;
   for (i=0 ; i<loc_num_devices ; i++) {
