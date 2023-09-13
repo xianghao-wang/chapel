@@ -104,7 +104,14 @@ void chpl_gpu_impl_use_device(c_sublocid_t dev_id) {
 void chpl_gpu_impl_init(int* num_devices) {
   CUDA_CALL(cuInit(0));
 
-  CUDA_CALL(cuDeviceGetCount(num_devices));
+  int32_t num = - 1;
+  CUDA_CALL(cuDeviceGetCount(&num));
+  assert(num != -1);
+
+  if (*num_devices == -1)
+    *num_devices = num;
+  else
+    *num_devices = *num_devices < num ? *num_devices : num;
 
   const int loc_num_devices = *num_devices;
   chpl_gpu_primary_ctx = chpl_malloc(sizeof(CUcontext)*loc_num_devices);

@@ -40,42 +40,23 @@ int chpl_gpu_num_devices = -1;
 #include "chpl-comm-compiler-macros.h"
 
 void chpl_gpu_init(void) {
-  chpl_gpu_impl_init(&chpl_gpu_num_devices);
-
-  assert(chpl_gpu_num_devices >= 0);
-
-  // override number of devices if applicable
+  // Get available number of devices per locale from env
   const char* env;
-  int32_t num = -1;
+  chpl_gpu_num_devices = -1;
   if ((env = chpl_env_rt_get("NUM_GPUS_PER_LOCALE", NULL)) != NULL) {
-    if (sscanf(env, "%" SCNi32, &num) != 1) {
+    if (sscanf(env, "%" SCNi32, &chpl_gpu_num_devices) != 1) {
       chpl_error("Cannot parse CHPL_RT_NUM_GPUS_PER_LOCALE environment "
                  "variable", 0, 0);
     }
 
-    if (num < 0) {
+    if (chpl_gpu_num_devices < 0) {
       chpl_error("CHPL_RT_NUM_GPUS_PER_LOCALE must be >= 0", 0, 0);
     }
-
-#ifndef GPU_RUNTIME_CPU
-    if (chpl_gpu_num_devices > 0 && num > chpl_gpu_num_devices) {
-      char msg[200];
-      snprintf(msg, sizeof(msg),
-          "CHPL_RT_NUM_GPUS_PER_LOCALE = %" PRIi32 " is too large; "
-          "it must be less than or equal to the number of GPUs per node. "
-          "Detected %" PRIi32 " GPUs in node %" PRIi32 ". "
-          "Ignoring this environment variable.",
-          num, chpl_gpu_num_devices, chpl_nodeID);
-      chpl_warning(msg, 0, 0);
-    }
-    else {
-#endif
-      assert(num!=-1);
-      chpl_gpu_num_devices = num;
-#ifndef GPU_RUNTIME_CPU
-    }
-#endif
   }
+
+  // Initialize maximum NUM_GPUS_PER_LOCALE devices
+  chpl_gpu_impl_init(&chpl_gpu_num_devices);
+  assert(chpl_gpu_num_devices >= 0);
 }
 
 void chpl_gpu_support_module_finished_initializing(void) {
