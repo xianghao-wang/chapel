@@ -97,6 +97,12 @@ static void init_device_context(int dev_id) {
 }
 
 static void switch_context(int dev_id) {
+  if (!devices_context_initialized[dev_id]) {
+    CUDA_CALL(cudaSetDevice(dev_id));
+    return;
+  }
+    
+
   CUcontext next_context = chpl_gpu_primary_ctx[dev_id];
 
   if (!chpl_gpu_has_context()) {
@@ -146,29 +152,29 @@ void chpl_gpu_impl_init(int* num_devices) {
   devices_context_initialized = chpl_malloc(sizeof(bool)*loc_num_devices);
   memset(devices_context_initialized, 0, sizeof(bool)*loc_num_devices);
 
-  int i;
-  for (i=0 ; i<loc_num_devices ; i++) {
-    CUdevice device;
-    CUcontext context;
+  // int i;
+  // for (i=0 ; i<loc_num_devices ; i++) {
+  //   CUdevice device;
+  //   CUcontext context;
 
-    CUDA_CALL(cuDeviceGet(&device, i));
-    CUDA_CALL(cuDevicePrimaryCtxSetFlags(device, CU_CTX_SCHED_BLOCKING_SYNC));
-    CUDA_CALL(cuDevicePrimaryCtxRetain(&context, device));
+  //   CUDA_CALL(cuDeviceGet(&device, i));
+  //   CUDA_CALL(cuDevicePrimaryCtxSetFlags(device, CU_CTX_SCHED_BLOCKING_SYNC));
+  //   CUDA_CALL(cuDevicePrimaryCtxRetain(&context, device));
 
-    CUDA_CALL(cuCtxSetCurrent(context));
-    // load the module and setup globals within
-    CUmodule module = chpl_gpu_load_module(chpl_gpuBinary);
-    chpl_gpu_cuda_modules[i] = module;
+  //   CUDA_CALL(cuCtxSetCurrent(context));
+  //   // load the module and setup globals within
+  //   CUmodule module = chpl_gpu_load_module(chpl_gpuBinary);
+  //   chpl_gpu_cuda_modules[i] = module;
 
-    cuDeviceGetAttribute(&deviceClockRates[i], CU_DEVICE_ATTRIBUTE_CLOCK_RATE, device);
+  //   cuDeviceGetAttribute(&deviceClockRates[i], CU_DEVICE_ATTRIBUTE_CLOCK_RATE, device);
 
-    chpl_gpu_devices[i] = device;
-    chpl_gpu_primary_ctx[i] = context;
+  //   chpl_gpu_devices[i] = device;
+  //   chpl_gpu_primary_ctx[i] = context;
 
-    // TODO can we refactor some of this to chpl-gpu to avoid duplication
-    // between runtime layers?
-    chpl_gpu_impl_set_globals(i, module);
-  }
+  //   // TODO can we refactor some of this to chpl-gpu to avoid duplication
+  //   // between runtime layers?
+  //   chpl_gpu_impl_set_globals(i, module);
+  // }
 }
 
 bool chpl_gpu_impl_is_device_ptr(const void* ptr) {
@@ -212,6 +218,7 @@ static void chpl_gpu_launch_kernel_help(int ln,
   CHPL_GPU_START_TIMER(load_time);
 
   c_sublocid_t dev_id = chpl_task_getRequestedSubloc();
+  init_device_context(dev_id);
   CUmodule cuda_module = chpl_gpu_cuda_modules[dev_id];
   void* function = chpl_gpu_load_function(cuda_module, name);
 
